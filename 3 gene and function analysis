@@ -1,0 +1,21 @@
+## do gene analysis using humann3
+
+conda deactivate
+conda activate biobakery3
+
+mkdir -p temp/concat
+    # concatenate the paired-end read into single reads
+    for i in `tail -n+2 metadata.txt|cut -f1`;do 
+      cat temp/hr/${i}_?.fastq \
+      > temp/concat/${i}.fq; done
+    # check sample numbers and size
+    ls -shl temp/concat/*.fq
+
+mkdir -p temp/humann3vjun
+tail -n+2 metadata.txt | cut -f1 | rush -j 8 \
+      "humann --input temp/concat/{1}.fq  \
+      --output temp/humann3vjun/ --threads 8 \
+      --metaphlan-options '--input_type fastq \
+      --bowtie2db /media/user/Gen5M2/metagenome_db/metaphlan406 \
+      -x mpa_vJun23_CHOCOPhlAnSGB_202403 \
+      -- offline'"
