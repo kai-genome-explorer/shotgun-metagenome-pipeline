@@ -1,0 +1,138 @@
+## taxonomy annotation using kraken2
+
+conda deactivate
+conda activate kraken2.1.3
+
+mkdir -p temp/kraken2
+ for i in `tail -n+2 metadata.txt | cut -f1`;do
+      kraken2 --db  /media/user/Gen5M2/metagenome_db/kraken2/pluspf \
+      --paired temp/hr/${i}_?.fastq \
+      --threads 32 --use-names --report-zero-counts \
+      --report temp/kraken2/${i}.report \
+      --output temp/kraken2/${i}.output; done
+
+for i in `tail -n+2 metadata.txt | cut -f1`;do
+      kreport2mpa.py -r temp/kraken2/${i}.report \
+        --display-header -o temp/kraken2/${i}.mpa; done
+
+mkdir -p result/kraken2
+# reordering
+    tail -n+2 metadata.txt | cut -f1 | rush -j 1 \
+      'tail -n+2 temp/kraken2/{1}.mpa | LC_ALL=C sort | cut -f 2 | sed "1 s/^/{1}\n/" > temp/kraken2/{1}_count '
+# extract the sample name as the rownames
+    header=`tail -n 1 metadata.txt | cut -f 1`
+    echo $header
+    tail -n+2 temp/kraken2/${header}.mpa | LC_ALL=C sort | cut -f 1 | \
+      sed "1 s/^/Taxonomy\n/" > temp/kraken2/0header_count
+    head -n3 temp/kraken2/0header_count
+
+# paste: combine the samples to generate a table
+    ls temp/kraken2/*count
+    paste temp/kraken2/*count > result/kraken2/tax_count.mpa
+# check the table 
+    csvtk -t stat result/kraken2/tax_count.mpa
+    head -n 5 result/kraken2/tax_count.mpa
+
+## using Bracken to calculate the abundance
+
+mkdir -p temp/bracken
+
+# extract the abundance data at Species, Genus, Order, Phylum, Domain level
+mkdir -p temp/bracken/S
+for i in `tail -n+2 metadata.txt | cut -f1`;do
+        bracken -d /media/user/Gen5M2/metagenome_db/kraken2/pluspf/ \
+          -i temp/kraken2/${i}.report \
+          -r 150 -l S -t 0 \
+          -o temp/bracken/S/${i}.brk \
+          -w temp/bracken/S/${i}.report; done
+
+mkdir -p temp/bracken/G
+    for i in `tail -n+2 metadata.txt | cut -f1`;do
+        bracken -d /media/user/Gen5M2/metagenome_db/kraken2/pluspf/ \
+          -i temp/kraken2/${i}.report \
+          -r 150 -l G -t 0 \
+          -o temp/bracken/G/${i}.brk \
+          -w temp/bracken/G/${i}.report; done
+
+mkdir -p temp/bracken/O
+for i in `tail -n+2 metadata.txt | cut -f1`;do
+        bracken -d /media/user/Gen5M2/metagenome_db/kraken2/pluspf/ \
+          -i temp/kraken2/${i}.report \
+          -r 150 -l O -t 0 \
+          -o temp/bracken/O/${i}.brk \
+          -w temp/bracken/O/${i}.report; done
+
+mkdir -p temp/bracken/P
+for i in `tail -n+2 metadata.txt | cut -f1`;do
+        bracken -d /media/user/Gen5M2/metagenome_db/kraken2/pluspf/ \
+          -i temp/kraken2/${i}.report \
+          -r 150 -l P -t 0 \
+          -o temp/bracken/P/${i}.brk \
+          -w temp/bracken/P/${i}.report; done
+
+mkdir -p temp/bracken/D
+for i in `tail -n+2 metadata.txt | cut -f1`;do
+        bracken -d /media/user/Gen5M2/metagenome_db/kraken2/pluspf/ \
+          -i temp/kraken2/${i}.report \
+          -r 150 -l D -t 0 \
+          -o temp/bracken/D/${i}.brk \
+          -w temp/bracken/D/${i}.report; done
+
+# check the row numbers before combine     
+    wc -l temp/bracken/S/*.report
+
+# combine the result into one table by using the 6th column’s read counts
+    tail -n+2 metadata.txt | cut -f1 | rush -j 1 \
+      'tail -n+2 temp/bracken/S/{1}.brk | LC_ALL=C sort | cut -f6 | sed "1 s/^/{1}\n/" \
+      > temp/bracken/S/{1}.count'
+    tail -n+2 metadata.txt | cut -f1 | rush -j 1 \
+      'tail -n+2 temp/bracken/G/{1}.brk | LC_ALL=C sort | cut -f6 | sed "1 s/^/{1}\n/" \
+      > temp/bracken/G/{1}.count'
+    tail -n+2 metadata.txt | cut -f1 | rush -j 1 \
+      'tail -n+2 temp/bracken/O/{1}.brk | LC_ALL=C sort | cut -f6 | sed "1 s/^/{1}\n/" \
+      > temp/bracken/O/{1}.count'
+    tail -n+2 metadata.txt | cut -f1 | rush -j 1 \
+      'tail -n+2 temp/bracken/P/{1}.brk | LC_ALL=C sort | cut -f6 | sed "1 s/^/{1}\n/" \
+      > temp/bracken/P/{1}.count'
+    tail -n+2 metadata.txt | cut -f1 | rush -j 1 \
+      'tail -n+2 temp/bracken/D/{1}.brk | LC_ALL=C sort | cut -f6 | sed "1 s/^/{1}\n/" \
+      > temp/bracken/D/{1}.count'
+
+    h=`tail -n1 metadata.txt|cut -f1`
+
+    tail -n+2 temp/bracken/S/${h}.brk | LC_ALL=C sort | cut -f1 | \
+      sed "1 s/^/Taxonomy\n/" > temp/bracken/S/0header.count
+    tail -n+2 temp/bracken/G/${h}.brk | LC_ALL=C sort | cut -f1 | \
+      sed "1 s/^/Taxonomy\n/" > temp/bracken/G/0header.count
+    tail -n+2 temp/bracken/O/${h}.brk | LC_ALL=C sort | cut -f1 | \
+      sed "1 s/^/Taxonomy\n/" > temp/bracken/O/0header.count
+    tail -n+2 temp/bracken/P/${h}.brk | LC_ALL=C sort | cut -f1 | \
+      sed "1 s/^/Taxonomy\n/" > temp/bracken/P/0header.count
+    tail -n+2 temp/bracken/D/${h}.brk | LC_ALL=C sort | cut -f1 | \
+      sed "1 s/^/Taxonomy\n/" > temp/bracken/D/0header.count
+
+paste temp/bracken/S/*count > result/kraken2/bracken.S.txt
+paste temp/bracken/G/*count > result/kraken2/bracken.G.txt
+paste temp/bracken/O/*count > result/kraken2/bracken.O.txt
+paste temp/bracken/P/*count > result/kraken2/bracken.P.txt
+paste temp/bracken/D/*count > result/kraken2/bracken.D.txt
+
+# customize the output
+# remove human being sequence
+    grep 'Chordata' result/kraken2/bracken.P.${prop}
+    grep -v 'Chordata' result/kraken2/bracken.P.txt > result/kraken2/bracken.P-H.txt
+
+    # human latin name: P:Chordata,S:Homo sapiens
+    grep 'Homo sapiens' result/kraken2/bracken.S.txt
+    grep -v 'Homo sapiens' result/kraken2/bracken.S.txt \
+      > result/kraken2/bracken.S-H.txt
+
+
+# remove big temp files
+ /bin/rm -rf temp/kraken2/*.output
+
+# make Kron diagram
+    for i in `tail -n+2 metadata.txt|cut -f1`;do
+        kreport2krona.py -r temp/bracken/S/${i}.report -o temp/bracken/${i}.krona --no-intermediate-ranks
+        ktImportText temp/bracken/${i}.krona -o result/kraken2/krona.${i}.html
+    done
