@@ -1,0 +1,53 @@
+## quality control
+mkdir -p temp/qc result/qc
+
+# quality control of Fastq files
+# qc of multiple samples
+time tail -n+2 metadata.txt|cut -f1|rush -j 32 \
+      "fastp -i seq/{1}_R1.fastq.gz -I seq/{1}_R2.fastq.gz \
+        -j temp/qc/{1}_fastp.json -h temp/qc/{1}_fastp.html \
+        -o temp/qc/{1}_1.fastq  -O temp/qc/{1}_2.fastq \
+        > temp/qc/{1}.log 2>&1"
+
+# summarize the qc results
+    echo -e "SampleID\tRaw\tClean" > temp/fastp
+    for i in `tail -n+2 metadata.txt|cut -f1`;do
+        echo -e -n "$i\t" >> temp/fastp
+        grep 'total reads' temp/qc/${i}.log|uniq|cut -f2 -d ':'|tr '\n' '\t' >> temp/fastp
+        echo "" >> temp/fastp
+        done
+    sed -i 's/ //g;s/\t$//' temp/fastp
+    # sequence the result based on metadata
+    awk 'BEGIN{FS=OFS="\t"}NR==FNR{a[$1]=$0}NR>FNR{print a[$1]}' temp/fastp metadata.txt \
+      > result/qc/fastp.txt
+    cat result/qc/fastp.txt
+
+## remove host genome
+conda activate kneaddata
+
+ time tail -n+2 metadata.txt|cut -f1|rush -j 32 \
+      "sed '1~4 s/ 1:/.1:/;1~4 s/$/\/1/' temp/qc/{}_1.fastq > /tmp/{}_1.fastq; \
+      sed '1~4 s/ 2:/.1:/;1~4 s/$/\/2/' temp/qc/{}_2.fastq > /tmp/{}_2.fastq; \
+      kneaddata -i1 /tmp/{1}_1.fastq -i2 /tmp/{1}_2.fastq \
+      -o temp/hr --output-prefix {1} \
+      --bypass-trim --bypass-trf --reorder \
+      --bowtie2-options '--very-sensitive --dovetail' \
+      -db /media/user/Gen5M2/metagenome_db/kneaddata/oryza/oryza1  \
+      --remove-intermediate-output -v -t 3; \
+      rm /tmp/{}_1.fastq /tmp/{}_2.fastq"
+
+# check the size
+ ls -shtr temp/hr/*_unmatched_?.fastq
+
+# change file name
+rename 's/unmatched_//' temp/hr/*.fastq
+
+# summarize the result of qc
+kneaddata_read_count_table --input temp/hr \
+      --output temp/kneaddata.txt
+
+cut -f 1,2,5,6 temp/kneaddata.txt | sed 's/_1_kneaddata//' > result/qc/sum.txt # check the important column
+
+ csvtk -t pretty result/qc/sum.txt # check the table in a pretty way
+
+ paste <(head -n40 temp/hr/`tail -n+2 metadata.txt|cut -f1|head -n1`_1.fastq|grep @)    <(head -n40 temp/hr/`tail -n+2 metadata.txt|cut -f1|head -n1`_2.fastq|grep @) # check if the ID match
