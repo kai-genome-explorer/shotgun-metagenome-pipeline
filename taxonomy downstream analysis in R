@@ -1,0 +1,125 @@
+library(devtools)
+library(shiny)
+library(pavian)
+library(stringr)
+library(tidyverse)
+save.image()
+## use pavian, and feed output of kracken2 to pavian to extract phylum, order, genus, species data
+pavian::runApp(port=5000)
+# use pavian as advised by pavian.
+
+## deal with phylum data set
+# generate the average of taxonomy abundance data
+p_abs <- phylum[, c(1, 5:36)]
+View(p_abs)
+colnames(p_abs)
+rownames(p_abs) <- p_abs[, 1]
+p_abs <- as.data.frame(t(p_abs[, -1]))
+sapply(p_abs, class)
+p_abs$SamNam1 <- rownames(p_abs)
+
+p_abs$SamNam <- substr(p_abs$SamNam1, start = 2, stop = 8) # subset a string in a column
+p_abs[1, 91]
+p_abs <- p_abs[, -91]
+substr(p_abs$SamNam, 6, 6) <- "-" # replace one character in a column
+
+p_abs_meta <- left_join(p_abs, metadata_mexico202509)
+sapply(p_abs_meta, class)
+View(p_abs_meta)
+p_abs_group <- p_abs_meta %>% group_by(groupid) %>% summarize(across(where(is.numeric), mean))
+View(p_abs_group)
+p_abs_group[is.na(p_abs_group)] <- 0
+
+# split into bacteria archaea viruses and fungi
+p_abs_dom <- phylum[, c(1, 5:36, 103)]
+p_abs_dom$dom <- substr(p_abs_dom$lineage, start = 25, stop = 32)
+View(p_abs_dom)
+p_abs_bac <- filter(p_abs_dom, dom == "Bacteria")
+View(p_abs_bac)
+p_abs_arc <- filter(p_abs_dom, dom == "Archaea>")
+p_abs_fun <- filter(p_abs_dom, dom == "Eukaryot") 
+p_abs_vir <- filter(p_abs_dom, dom != "Eukaryot" & dom != "Archaea>" & dom != "Bacteria") 
+
+p_bac <- p_abs_group[, c("groupid", p_abs_bac[, 1])]
+View(p_bac)
+p_arc <- p_abs_group[, c("groupid", p_abs_arc[, 1])]
+View(p_arc)
+p_fun <- p_abs_group[, c("groupid", p_abs_fun[, 1])]
+View(p_fun)
+p_vir <- p_abs_group[, c("groupid", p_abs_vir[, 1])]
+View(p_vir)
+
+## alpha diversity calculation 
+colnames(s_abs_meta)[16970:16980]
+s_abs_meta$groupid
+s_abs_meta[is.na(s_abs_meta)] <- 0
+s_abs_meta_bac <- s_abs_meta[, c("groupid", s_abs_bac[, 1])]
+s_abs_meta_arc <- s_abs_meta[, c("groupid", s_abs_arc[, 1])]
+s_abs_meta_fun <- s_abs_meta[, c("groupid", s_abs_fun[, 1])]
+s_abs_meta_vir <- s_abs_meta[, c("groupid", s_abs_vir[, 1])]
+
+s_abs_meta_bac_coco <- s_abs_meta_bac[c(1:8, 13:20, 25:28), ]
+s_abs_meta_bac_coco$groupid
+s_abs_meta_bac_bag <- s_abs_meta_bac[c(1:4, 9:12, 13:16, 21:24, 29:32), ]
+s_abs_meta_bac_bag$groupid
+
+s_abs_meta_ar_coco <- s_abs_meta_arc[c(1:8, 13:20, 25:28), ]
+s_abs_meta_arc_bag <- s_abs_meta_arc[c(1:4, 9:12, 13:16, 21:24, 29:32), ]
+
+s_abs_meta_fun_coco <- s_abs_meta_fun[c(1:8, 13:20, 25:28), ]
+s_abs_meta_fun_bag <- s_abs_meta_fun[c(1:4, 9:12, 13:16, 21:24, 29:32), ]
+
+s_abs_meta_vir_coco <- s_abs_meta_vir[c(1:8, 13:20, 25:28), ]
+s_abs_meta_vir_bag <- s_abs_meta_vir[c(1:4, 9:12, 13:16, 21:24, 29:32), ]
+
+if (!requireNamespace("vegan", quietly = TRUE)) install.packages("vegan")
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+library(ggplot2)
+library(vegan)
+
+coc_bac <- as.matrix(s_abs_meta_bac_coco[, -1])
+View(coc_bac)
+coc_bac_richness <- specnumber(coc_bac)
+coc_bac_shannon <- diversity(coc_bac, index = "shannon")
+coc_bac_simpson <- diversity(coc_bac, index = "simpson")
+coc_bac_div <- data.frame(Group = s_abs_meta_bac_coco[, 1], 
+                                Richness = coc_bac_richness, 
+                                Shannon = coc_bac_shannon, 
+                                Simpson = coc_bac_simpson)
+print(coc_bac_div)
+write.csv(coc_bac_div, "coc_bac_div.csv")
+
+# Create a violin plot
+coc_bac_div$Group <- as.character(coc_bac_div$Group)
+sapply(coc_bac_div, class)
+g_coc_bac <- ggplot(coc_bac_div, aes(x = Group, y = Shannon, fill = Group)) +
+  geom_violin(trim = FALSE) +
+  labs(title = "Shannon_Bacteria_Coco",
+       x = "Group",
+       y = "Shannon") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#1f77b4", "#ff7f0e", "#2ca02c", "grey", "firebrick"))
+g_coc_bac
+
+# barplot of taxonomy 
+p_abs_group$groupid <- as.character(p_abs_group$groupid)
+p_coc <- p_abs_group[c(1, 2, 4, 5, 7), ]
+p_coc[, -1] <- p_coc[, -1]*100
+p_bag <- p_abs_group[c(1, 3, 4, 6, 8), ]
+p_bag[, -1] <- p_bag[, -1]*100
+p_coc2 <- p_coc %>% pivot_longer(-groupid)
+p_bag2 <- p_bag %>% pivot_longer(-groupid)
+
+g_pcoc <- ggplot(p_coc2, aes(x=groupid, y=value, fill=name)) +
+  geom_bar(position = "fill", stat = "identity") + 
+  scale_fill_manual(
+    values = (rep(c("skyblue", "orange", "yellow4", "maroon4", "plum", "olivedrab3", "grey64", "burlywood", "darkseagreen", "deepskyblue","tan", "brown3", "maroon4"), each = 1, times = 10))
+  ) +
+  theme_grey(base_size = 22) +
+  labs(title = "Phylum") +
+  theme(
+    legend.title = element_text(size = 14),       # Legend title font size
+    legend.text = element_text(size = 6)
+    ) +
+  labs(title = "Phylum Abundance", x = "Sample", y = "Relative Abundance")
+g_pcoc
