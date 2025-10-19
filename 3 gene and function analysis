@@ -19,3 +19,23 @@ tail -n+2 metadata.txt | cut -f1 | rush -j 8 \
       --bowtie2db /media/user/Gen5M2/metagenome_db/metaphlan406 \
       -x mpa_vJun23_CHOCOPhlAnSGB_202403 \
       -- offline'"
+
+## function analysis using humann3 output
+
+    mkdir -p result/humann3
+    humann_join_tables --input temp/humann3vjun \
+      --file_name pathabundance \
+      --output result/humann3/pathabundance.tsv
+    # adjust the sample names
+    sed -i 's/_Abundance//g' result/humann3/pathabundance.tsv
+    # summarize and preview
+    csvtk -t stat result/humann3/pathabundance.tsv
+    head -n5 result/humann3/pathabundance.tsv
+
+# standardize to relab(1) or cpm(1,000,000)
+
+    humann_renorm_table \
+      --input result/humann3/pathabundance.tsv \
+      --units relab \
+      --output result/humann3/pathabundance_relab.tsv
+    head -n5 result/humann3/pathabundance_relab.tsv
