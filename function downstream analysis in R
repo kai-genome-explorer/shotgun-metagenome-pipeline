@@ -1,0 +1,120 @@
+# prepare the KO data set
+ko <- as.data.frame(t(ko_unstratified_relab))
+View(ko)
+colnames(ko) <- ko[1, ]
+ko <- ko[-1, ]
+colnames(ko)[1] <- "SamNam"
+sapply(ko, class)
+i <- c(2:5799)
+ko[, i] <- apply(ko[, i], 2, as.numeric)
+
+ko_group <- left_join(ko, metadata_mexico202509)
+sapply(ko_group, class)
+View(ko_group)
+ko_group <- ko_group %>% group_by(groupid) %>% summarize(across(where(is.numeric), mean))
+ko_group[is.na(ko_group)] <- 0
+ko_group <- ko_group*10000
+ko_group[, 1] <- ko_group[, 1]/10000
+
+ko_coc <- ko_group[c(1, 2, 4, 5, 7), ]
+ko_bag <- ko_group[c(1, 3, 4, 6, 8), ]
+# prepare the EC data set
+library(dplyr)
+sapply(ec, class)
+ec_filtered <- ec
+ec_filtered <- ec %>% 
+  dplyr::filter(!grepl("\\|", GeneFamily))
+rownames(ec_filtered) <- ec_filtered[, 1]
+ec_filtered <- ec_filtered[, -1]
+sample_totals <- colSums(ec_filtered, na.rm = TRUE) # calculate the sample sum
+ec_matrix <- sweep(ec_filtered, 2, sample_totals, "/") * 1e6 # normalization of the RPKs into CPM
+View(ec_matrix)
+ec_filtered2 <- as.data.frame(ec_matrix)
+View(ec_filtered2)
+ec_filtered2 <- ec_filtered2[-c(1:2), ]
+sum(ec_filtered2[, 5])
+
+ec_filtered2 <- as.data.frame(t(ec_filtered2))
+sapply(ec_filtered2, class)
+ec_filtered2$SamNam1 <- rownames(ec_filtered2)
+
+ec_filtered2$SamNam <- substr(ec_filtered2$SamNam1, start = 2, stop = 8) # subset a string in a column
+ec_filtered2[1, 2327]
+ec_filtered2 <- ec_filtered2[, -2327]
+substr(ec_filtered2$SamNam, 6, 6) <- "-" # replace one character in a column
+
+ec_group <- left_join(ec_filtered2, metadata_mexico202509)
+sapply(ec_group, class)
+View(ec_group)
+ec_group <- ec_group %>% group_by(groupid) %>% summarize(across(where(is.numeric), mean))
+ec_group[is.na(ec_group)] <- 0
+
+ec_coc <- ec_group[c(1, 2, 4, 5, 7), ]
+ec_bag <- ec_group[c(1, 3, 4, 6, 8), ]
+# prepare the genus data set
+View(g_per_group)
+genus_coc <- g_per_group[c(1, 2, 4, 5, 7), ]
+genus_bag <- g_per_group[c(1, 3, 4, 6, 8), ]
+
+# tailor the biomarker list of IPM
+IPM_tailored <- data.frame(biomarkerid = c(1:5799), ko.id = c(colnames(ko[, -1])))
+View(IPM_tailored)
+IPM_tailored <- inner_join(IPM_tailored, IPM)
+
+# nitrification
+nitri_coc <- ko_coc[, c("groupid", "K00370", "K00371", "K10535", "K10946", "K10945", "K00376")]
+nitri_coc$sum <- rowSums(nitri_coc[, -1])
+nitri_coc$groupid <- as.character(nitri_coc$groupid)
+nitri_bag <- ko_bag[, c("groupid", "K00370", "K00371", "K10535", "K10946", "K10945", "K00376")]
+nitri_bag$sum <- rowSums(nitri_bag[, -1])
+nitri_bag$groupid <- as.character(nitri_bag$groupid)
+View(nitri_coc)
+nitri_coc2 <- nitri_coc %>% pivot_longer(-groupid)
+nitri_coc3 <- nitri_coc[, -8] %>% pivot_longer(-groupid)
+nitri_bag2 <- nitri_bag[, -8] %>% pivot_longer(-groupid)
+View(nitri_bag)
+
+g_nitri_coco2 <- ggplot(nitri_coc3, aes(x=groupid, y=value, fill=name)) +
+  geom_bar(position = "stack", stat = "identity") + 
+  scale_fill_manual(
+    values = (rep(c("tomato", "skyblue", "yellow4", "orange", "maroon4", "plum"), each = 1, times = 1))
+  ) +
+  theme_grey(base_size = 22) +
+labs(title = "Nitrate Generation", x = "Sample", y = "CPM")
+g_nitri_coco2
+
+g_nitri_bag <- ggplot(nitri_bag2, aes(x=groupid, y=value, fill=name)) +
+  geom_bar(position = "stack", stat = "identity") + 
+  scale_fill_manual(
+    values = (rep(c("tomato", "skyblue", "yellow4", "orange", "maroon4", "plum"), each = 1, times = 1))
+  ) +
+  theme_grey(base_size = 22) +
+labs(title = "Nitrate Generation", x = "Sample", y = "CPM")
+g_nitri_bag
+write.csv(nitri_coc, "no3_coc.csv")
+write.csv(nitri_bag, "no3_bag.csv")
+
+# heat draught stress
+ocd_coc <- genus_coc[, c("groupid", "Bacillus", "Pseudomonas", "Azospirillum", "Arthrobacter", "Rhizobium", "Sinorhizobium", "Paenibacillus", "Mesorhizobium", "Trichoderma", "Streptomyces", "Achromobacter",
+                        "Variovorax", "Burkholderia", "Caballeronia", "Paraburkholderia", "Enterobacter", "Stenotrophomonas", "Glutamicibacter", "Exiguobacterium", "Halomonas", "Planococcus",
+                        "Klebsiella", "Acinetobacter")]
+View(ocd_coc)
+ocd_coc$groupid <- as.character(ocd_coc$groupid)
+ocd_bag <- genus_bag[, c("groupid", "Bacillus", "Pseudomonas", "Azospirillum", "Arthrobacter", "Rhizobium", "Sinorhizobium", "Paenibacillus", "Mesorhizobium", "Trichoderma", "Streptomyces", "Achromobacter",
+                         "Variovorax", "Burkholderia", "Caballeronia", "Paraburkholderia", "Enterobacter", "Stenotrophomonas", "Glutamicibacter", "Exiguobacterium", "Halomonas", "Planococcus",
+                         "Klebsiella", "Acinetobacter")]
+View(ocd_bag)
+ocd_bag$groupid <- as.character(ocd_bag$groupid)
+
+ocd_coc2 <- ocd_coc %>% pivot_longer(-groupid)
+ocd_bag2 <- ocd_bag %>% pivot_longer(-groupid)
+View(ocd_bag2)
+
+g_ocd_coco2 <- ggplot(ocd_coc2, aes(x=groupid, y=value, fill=name)) +
+  geom_bar(position = "stack", stat = "identity") + 
+  scale_fill_manual(
+    values = (rep(c("skyblue", "yellow4", "orange", "maroon4", "plum", "olivedrab3", "grey64", "burlywood", "darkseagreen", "deepskyblue", "brown3", "tan", "maroon4"), each = 1, times = 2))
+  ) +
+  theme_grey(base_size = 22) +
+  labs(title = "Heat Stress Adaptation", x = "Sample", y = "Relative Abundance (%)")
+g_ocd_coco2
